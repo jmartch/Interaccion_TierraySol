@@ -2,69 +2,83 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-# Constantes físicas
+# Constantes
 G = 6.67430e-11
-M_sol = 1.989e30
-M_tierra = 5.972e24
 UA = 1.496e11
 dt = 3600 * 24  # 1 día
 T_total = 3.154e7  # 1 año
 N = int(T_total // dt)
 
-# Condiciones iniciales
-x = UA
-y = 0
-vx = 0
-vy = 29.783e3
+# Cuerpos: Sol, Mercurio, Venus, Tierra, Marte
+names = ['Sol', 'Mercurio', 'Venus', 'Tierra', 'Marte']
+masses = np.array([1.989e30, 3.30e23, 4.869e24, 5.972e24, 6.419e23])
+positions = np.array([
+    [0.0, 0.0],                 # Sol
+    [0.387 * UA, 0.0],          # Mercurio
+    [0.723 * UA, 0.0],          # Venus
+    [1.0 * UA, 0.0],            # Tierra
+    [-1.524 * UA, 0.0],         # Marte
+])
+velocities = np.array([
+    [0.0, 0.0],                  # Sol
+    [0.0, -47.4e3],              # Mercurio
+    [0.0, -35.02e3],             # Venus
+    [0.0, 29.783e3],             # Tierra
+    [0.0, 24.077e3],             # Marte
+])
 
-# Almacenar trayectoria para animar
-x_verlet, y_verlet = [x], [y]
-x_v, y_v = x, y
-vx_v, vy_v = vx, vy
+n_bodies = len(masses)
+trajectories = [ [positions[i].copy()] for i in range(n_bodies) ]
 
-def calcular_aceleracion(x, y):
-    r = np.sqrt(x**2 + y**2)
-    a_mag = -G * M_sol / r**2
-    return a_mag * (x / r), a_mag * (y / r)
+#Sumatoria de aceleraciones de cada planeta con cada otro planeta
+def compute_accelerations(positions):
+    accelerations = np.zeros_like(positions)
+    for i in range(n_bodies):
+        for j in range(n_bodies):
+            if i != j:
+                r_vec = positions[j] - positions[i]
+                r = np.linalg.norm(r_vec)
+                if r != 0:
+                    accelerations[i] += G * masses[j] * r_vec / r**3
+    return accelerations
 
-# Simulación y guardado de posiciones
+# Simulación
 for _ in range(N):
-    ax, ay = calcular_aceleracion(x_v, y_v)
-    x_nuevo = x_v + vx_v * dt + 0.5 * ax * dt**2
-    y_nuevo = y_v + vy_v * dt + 0.5 * ay * dt**2
-    ax_nuevo, ay_nuevo = calcular_aceleracion(x_nuevo, y_nuevo)
-    vx_v += 0.5 * (ax + ax_nuevo) * dt
-    vy_v += 0.5 * (ay + ay_nuevo) * dt
-    x_v, y_v = x_nuevo, y_nuevo
-    x_verlet.append(x_v)
-    y_verlet.append(y_v)
+    acc = compute_accelerations(positions)
+    positions += velocities * dt + 0.5 * acc * dt**2
+    acc_new = compute_accelerations(positions)
+    velocities += 0.5 * (acc + acc_new) * dt
+    for i in range(n_bodies):
+        trajectories[i].append(positions[i].copy())
 
-# Crear animación
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.set_xlim(-1.2*UA, 1.2*UA)
-ax.set_ylim(-1.2*UA, 1.2*UA)
+# Animación
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(-2*UA, 2*UA)
+ax.set_ylim(-2*UA, 2*UA)
 ax.set_aspect('equal')
-ax.grid(True)
-ax.set_title("Simulación Tierra-Sol (Verlet)")
-
-line, = ax.plot([], [], 'b-', lw=1, label="Órbita")
-planet, = ax.plot([], [], 'bo', label="Tierra")
-sun = ax.plot(0, 0, 'yo', markersize=12, label="Sol")
+ax.set_title("Simulación  ")
+colors = ['yellow', 'gray', 'orange', 'blue', 'red']
+lines = [ax.plot([], [], '-', color=colors[i])[0] for i in range(n_bodies)]
+bodies = [ax.plot([], [], 'o', color=colors[i], label=names[i])[0] for i in range(n_bodies)]
 
 def init():
-    line.set_data([], [])
-    planet.set_data([], [])
-    return line, planet
+    for line, body in zip(lines, bodies):
+        line.set_data([], [])
+        body.set_data([], [])
+    return lines + bodies
 
 def update(frame):
-    line.set_data(x_verlet[:frame], y_verlet[:frame])
-    planet.set_data(x_verlet[frame], y_verlet[frame])
-    return line, planet
+    for i in range(n_bodies):
+        traj = np.array(trajectories[i])
+        max_frame = min(frame, len(traj) - 1)  # 👈 Protect against out-of-bounds
 
-ani = animation.FuncAnimation(
-    fig, update, frames=len(x_verlet), init_func=init,
-    interval=10, blit=True, repeat=True
-)
+        lines[i].set_data(traj[:max_frame, 0], traj[:max_frame, 1])
+        bodies[i].set_data([traj[max_frame, 0]], [traj[max_frame, 1]])
+    return lines + bodies
+
+ani = animation.FuncAnimation(fig, update, frames=N, init_func=init,
+                              interval=10, blit=True, repeat=True)
 
 plt.legend()
+plt.grid(True)
 plt.show()
