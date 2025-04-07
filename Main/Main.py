@@ -74,7 +74,7 @@ def init():
 def update(frame):
     for i in range(n_bodies):
         traj = np.array(trajectories[i])
-        max_frame = min(frame, len(traj) - 1)  # 👈 Protect against out-of-bounds
+        max_frame = min(frame, len(traj) - 1)  
 
         lines[i].set_data(traj[:max_frame, 0], traj[:max_frame, 1])
         bodies[i].set_data([traj[max_frame, 0]], [traj[max_frame, 1]])
