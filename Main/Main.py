@@ -1,13 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.animation import PillowWriter
 
 # Constantes
 G = 6.67430e-11
 UA = 1.496e11
+
+# Parámetros de simulación
 dt = 3600 * 24  # 1 día
-T_total = 3.154e7  # 1 año
+T_total = 3.154e7 * 2  # 2 años
 N = int(T_total // dt)
+
 
 # Cuerpos: Sol, Mercurio, Venus, Tierra, Marte
 names = ['Sol', 'Mercurio', 'Venus', 'Tierra', 'Marte']
@@ -82,3 +86,4 @@ ani = animation.FuncAnimation(fig, update, frames=N, init_func=init,
 plt.legend()
 plt.grid(True)
 plt.show()
+
