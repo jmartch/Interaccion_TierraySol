@@ -1,70 +1,105 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.animation import PillowWriter
 
 # Constantes físicas
 G = 6.67430e-11
 M_sol = 1.989e30
-M_tierra = 5.972e24
 UA = 1.496e11
+
+# Parámetros de simulación
 dt = 3600 * 24  # 1 día
-T_total = 3.154e7  # 1 año
+T_total = 3.154e7 * 2  # 2 años
 N = int(T_total // dt)
 
-# Condiciones iniciales
-x = UA
-y = 0
-vx = 0
-vy = 29.783e3
+# Configuración de planetas [masa, distancia inicial (UA), velocidad (km/s), color]
+planetas = {
+    'Mercurio': [3.3011e23, 0.387, 47.36, 'gray'],
+    'Venus': [4.8675e24, 0.723, 35.02, 'orange'],
+    'Tierra': [5.972e24, 1.0, 29.78, 'blue'],
+    'Marte': [6.417e23, 1.524, 24.07, 'red']
+}
 
-# Almacenar trayectoria para animar
-x_verlet, y_verlet = [x], [y]
-x_v, y_v = x, y
-vx_v, vy_v = vx, vy
+# Inicialización de estados
+estados = {}
+for nombre, (masa, distancia, velocidad, color) in planetas.items():
+    estados[nombre] = {
+        'masa': masa,
+        'color': color,
+        'pos': np.array([distancia * UA, 0.0]),
+        'vel': np.array([0.0, velocidad * 1000]),
+        'trayectoria': np.zeros((N+1, 2))
+    }
+    estados[nombre]['trayectoria'][0] = estados[nombre]['pos']
 
-def calcular_aceleracion(x, y):
-    r = np.sqrt(x**2 + y**2)
-    a_mag = -G * M_sol / r**2
-    return a_mag * (x / r), a_mag * (y / r)
+def calcular_aceleracion(pos, masa_central):
+    r = np.linalg.norm(pos)
+    factor = -G * masa_central / r**3
+    return factor * pos
 
-# Simulación y guardado de posiciones
-for _ in range(N):
-    ax, ay = calcular_aceleracion(x_v, y_v)
-    x_nuevo = x_v + vx_v * dt + 0.5 * ax * dt**2
-    y_nuevo = y_v + vy_v * dt + 0.5 * ay * dt**2
-    ax_nuevo, ay_nuevo = calcular_aceleracion(x_nuevo, y_nuevo)
-    vx_v += 0.5 * (ax + ax_nuevo) * dt
-    vy_v += 0.5 * (ay + ay_nuevo) * dt
-    x_v, y_v = x_nuevo, y_nuevo
-    x_verlet.append(x_v)
-    y_verlet.append(y_v)
+# Simulación
+for i in range(1, N+1):
+    for nombre in planetas:
+        planeta = estados[nombre]
+        a = calcular_aceleracion(planeta['pos'], M_sol)
+        nueva_pos = planeta['pos'] + planeta['vel'] * dt + 0.5 * a * dt**2
+        nueva_a = calcular_aceleracion(nueva_pos, M_sol)
+        planeta['vel'] += 0.5 * (a + nueva_a) * dt
+        planeta['pos'] = nueva_pos
+        planeta['trayectoria'][i] = nueva_pos
 
-# Crear animación
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.set_xlim(-1.2*UA, 1.2*UA)
-ax.set_ylim(-1.2*UA, 1.2*UA)
+# Configuración de la figura
+fig, ax = plt.subplots(figsize=(12, 12))
+ax.set_xlim(-2, 2)
+ax.set_ylim(-2, 2)
 ax.set_aspect('equal')
-ax.grid(True)
-ax.set_title("Simulación Tierra-Sol (Verlet)")
+ax.grid(True, alpha=0.3)
+ax.set_title("Sistema Solar Interno - Órbitas Completas", fontsize=16, pad=20)
 
-line, = ax.plot([], [], 'b-', lw=1, label="Órbita")
-planet, = ax.plot([], [], 'bo', label="Tierra")
-sun = ax.plot(0, 0, 'yo', markersize=12, label="Sol")
+# Dibujar el Sol
+ax.plot(0, 0, 'yo', markersize=25, label='Sol')
+
+# Dibujar todas las trayectorias completas primero (líneas estáticas)
+for nombre in planetas:
+    color = estados[nombre]['color']
+    trayectoria_ua = estados[nombre]['trayectoria'] / UA
+    ax.plot(trayectoria_ua[:, 0], trayectoria_ua[:, 1], '-', 
+            color=color, alpha=0.5, lw=1.5, label=nombre)
+
+# Elementos de animación (solo los planetas como puntos móviles)
+puntos = {}
+for nombre in planetas:
+    color = estados[nombre]['color']
+    puntos[nombre], = ax.plot([], [], 'o', color=color, markersize=10)
+
+ax.legend(loc='upper right', fontsize=12)
+time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes, 
+                   fontsize=14, bbox=dict(facecolor='white', alpha=0.8))
 
 def init():
-    line.set_data([], [])
-    planet.set_data([], [])
-    return line, planet
+    for nombre in planetas:
+        puntos[nombre].set_data([], [])
+    time_text.set_text('')
+    return list(puntos.values()) + [time_text]
 
 def update(frame):
-    line.set_data(x_verlet[:frame], y_verlet[:frame])
-    planet.set_data(x_verlet[frame], y_verlet[frame])
-    return line, planet
+    frame = frame % N  # Esto crea el bucle infinito
+    
+    for nombre in planetas:
+        pos_actual_ua = estados[nombre]['trayectoria'][frame] / UA
+        puntos[nombre].set_data([pos_actual_ua[0]], [pos_actual_ua[1]])
+    
+    days = int(frame * dt / (3600 * 24))
+    time_text.set_text(f'Días: {days}\nAños: {days/365:.2f}')
+    
+    return list(puntos.values()) + [time_text]
 
+# Configuración de la animación
 ani = animation.FuncAnimation(
-    fig, update, frames=len(x_verlet), init_func=init,
-    interval=10, blit=True, repeat=True
+    fig, update, frames=N, init_func=init,
+    interval=20, blit=True, repeat=True
 )
 
-plt.legend()
+plt.tight_layout()
 plt.show()
